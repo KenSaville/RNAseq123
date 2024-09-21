@@ -1,0 +1,671 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This RNAseq walkthrough is adpated from
+
+RNA-seq analysis is easy as 1-2-3 with limma, Glimma
+and edgeR
+Charity W. Law, Monther Alhamdoosh, Shian Su, Xueyi Dong,
+Luyi Tian, Gordon K. Smyth, Matthew E. Ritchie
+
+It's pretty cool
+
+First, install download Bioconductor and the package for this analysis.  Be sure to check the console for any installation questions
+
+Before starting - go to a terminal and enter this command.  This libxml2 function is needed in the underlyinf linux system to install everything else.
+
+sudo apt-get install libxml2-dev
+
+```{r}
+# Install the Bioconductor installer
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install(version = "3.16")
+
+
+BiocManager::install("RNAseq123")
+
+```
+
+Install tidyverse, edgeR and other needed packages.  Give it some time.
+
+```{r}
+install.packages("tidyverse")
+library("tidyverse")
+library(limma)
+library(Glimma)
+library(edgeR)
+library(Mus.musculus)
+
+```
+
+The following code chunk will take you to a link to the 'vignette' for this analysis.  The code I have here was taken from that vignette.
+
+```{r}
+#browseVignettes("RNAseq123")
+```
+
+Download and unzip the files - this looks complicated.  Don't worry about the details.  We could also go to the web page:  https://www.ncbi.nlm.nih.gov/geo/.  Search for the data using the accession number (GSE63310), download the tar files and uncompress them.  But the following code does all that for us.  We could run this same analysis on a different set of samples by simply substituting the accession number for the accession number in the url below.  
+
+The code below downloads tar files and decompresses them.  The files should appear in the files window.
+
+```{r}
+url <- "https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE63310&format=file"
+utils::download.file(url, destfile="GSE63310_RAW.tar", mode="wb") 
+utils::untar("GSE63310_RAW.tar", exdir = ".")
+files <- c("GSM1545535_10_6_5_11.txt", "GSM1545536_9_6_5_11.txt", "GSM1545538_purep53.txt",
+  "GSM1545539_JMS8-2.txt", "GSM1545540_JMS8-3.txt", "GSM1545541_JMS8-4.txt",
+  "GSM1545542_JMS8-5.txt", "GSM1545544_JMS9-P7c.txt", "GSM1545545_JMS9-P8c.txt")
+for(i in paste(files, ".gz", sep=""))
+  R.utils::gunzip(i, overwrite=TRUE)
+```
+
+Make a vector containing the name of the files (didn't we just do this?)
+
+```{r}
+files <- c("GSM1545535_10_6_5_11.txt", "GSM1545536_9_6_5_11.txt", 
+   "GSM1545538_purep53.txt", "GSM1545539_JMS8-2.txt", 
+   "GSM1545540_JMS8-3.txt", "GSM1545541_JMS8-4.txt", 
+   "GSM1545542_JMS8-5.txt", "GSM1545544_JMS9-P7c.txt", 
+   "GSM1545545_JMS9-P8c.txt")
+```
+
+
+```{r}
+
+# check the format of the files.  This displays the files, but doesn't save them in a variable.
+
+read.delim(files[1], nrow=5)
+```
+
+This shows the  first 5 rows of the first file.  Just to check the format.  All nine files have this same format.
+
+Check to see that file 2 has similar format.  You should see the same column names and gene names (as ENTREZ IDs)  The counts will be different, as this is from a different sample.
+
+```{r}
+#your code here
+```
+
+# Construct a DGE list object containing a list of dataframes
+
+We will use the function readDGE to create a special type of data object, we will call X. (data objects are anything containing data in R.  vectors, lists, dataframes etc.)
+
+The readDGE function of the edgeR library organizes  files into a list.  The list will contain several dataframes (tables) of information.  The first dataframe is called "samples" and will contain the tables we created above.  This data frame contains sample names and the actual RNAseq count files. 
+
+we will add more dataframes below
+
+```{r}
+x <- readDGE(files, columns=c(1,3)) # reads in the RNAseq count files and organizes them into a list of dataframes.  At this point there is only one data frame (called "samples") in the list
+```
+
+If you get an error here saying readDGE not found it means you may have to rerun the code above installing bioconductor.  Remember - there may be some interactive questions you need to answer in the console.  Or you might just need to install the edgeR library.  You can do that by clicking the box to the right in the packages window.
+
+Check out the list called x
+
+```{r}
+class(x)
+```
+
+This shows that the data is in a special structure called a "DGElist".
+
+We'll explore this data strcuture a bit more as we move through the process, and add more stuff to it.
+
+```{r}
+dim(x)
+```
+
+The resulting DGEList-object contains a matrix of counts with 27,179 rows associated with unique Entrez gene identifiers (IDs) and nine columns associated with the individual samples in the experiment.
+
+This means there are 27,179 observations (rows) which are genes and 'observations' which are the count data in each row.  The 9 is for the 9 columns or variables, which are the nine samples.  However, within the 'DGElist' the data is still 'packaged' in files. 
+
+we can look at the data using the head() function
+
+```{r}
+head(x)
+```
+
+This shows that the list contains the counts matrix and a data frame called samples.  Each of these objects can be accessed individually using using x$samples or x$counts
+
+```{r}
+dim(x$samples) #shows there are 9 variables (the samples) and 4 columns)
+```
+
+You can see the organization of this table with head()
+
+```{r}
+head(x$samples)
+```
+
+The columns are the file names, group, lib.size, normalization fator.  Group and norm factor have the number 1 as a place holder.  We will add more info later.  The library size reflects how the RNA libraries were made and will be used to normalize the data.  ie if one sample's library has more reads than another, the number of counts for specific genes needs to be adjusted.
+
+Use dim and head (and x$counts) to see what the counts matrix looks like.
+
+```{r}
+#your code here
+head(x$counts)
+
+```
+
+It should show the gene IDs as rows (called tags in this table), sample names as columns, with count data in the middle. 
+The data will be "wrapped", but the actual data contains 9 columns straight across the top.
+
+Run the code below to see if you got the same thing.
+
+```{r}
+dim(x$counts)
+head(x$counts)
+
+```
+
+
+# Organizing the data
+
+For downstream analysis, sample-level information related to the experimental design needs to be associated with the columns of the counts matrix. This should include experimental variables, both biological and technical, that could have an effect on expression levels. Examples include cell type (basal, LP and ML in this experiment).  In other experiments, other variables might include: genotype (wild-type, knock-out), phenotype (disease status, sex, age), sample treatment (drug, control) and batch information (date experiment was performed if samples were collected and analysed at distinct time points) to name just a few.
+
+Above we used x$samples and x$counts to access individual tables.  To access individual columns in a table use x$samples$files, or x$samples$group, etc,  Or x$counts$samplename
+
+```{r}
+#The samples table is a data frame and so specific columns are accessed via this format tablename$columnname. 
+
+# For example x$samples gives the whole samples table because "samples" is a column in the x table
+
+# but samples is also a data frame with columns.  So to access its columns use x$samples$files or x$samples$group
+
+#run each of the following lines, one at a time to get a sense of how the data is organized.  Use ctrl-enter to run each line
+
+x$samples #shows the samples table
+x$samples$files #shows the files column
+x$samples$group  # or the group column
+x$samples$lib.size # or the lib.size column
+
+
+```
+
+because the counts table is a matrix it needs to be accessed using [] notation.  like x$counts[1,].  This will give the counts for row 1
+
+```{r}
+#The code below gives the counts matrix from the x data frame.
+x$counts
+
+#The code below gives the first row of the counts matrix from the x data frame.  It also gives all of the columns
+x$counts[1,]
+
+#this gives the first 5 rows and all columns.  Again - tags are the geneids
+x$counts[1:5,]
+
+```
+
+Now we will shorten the sample names to make them easier to deal with.
+
+```{r}
+# the current column names can be found with the following code (run it to see)
+
+colnames(x)
+
+# the number of characters in each column name are
+nchar(colnames(x))
+
+# Use substring to select the characters starting at the 12th character of each sample name until the end of that sample name.  Store this info in a vector called samplenames.
+
+samplenames <- substring(colnames(x), 12, nchar(colnames(x)))
+
+#look at the new sample names
+samplenames
+
+```
+
+Add the new sample names to the DGElist as new column names
+
+```{r}
+
+class(x)
+dim(x)
+View(x)
+colnames(x) <- samplenames
+
+#now look at the new colnames
+
+colnames(x)
+
+head(x)
+
+```
+
+Create a vector called group. We will use these to group each sample according to the sample types.  We make these labels of the type "factors" so we can group them together later.  Then we add these to the group column that already exists in x, eplacing the 1's that were used as placeholders.  To do this, we need to know which cell type each sample came from.  In this experiment there were three cells types Luminal progenitor cells (LP), Mature Luminal cells (ML) and basal cells (Basal).
+
+```{r}
+#make a vector called group with labels that label the type of each sample
+group <- as.factor(c("LP", "ML", "Basal", "Basal", "ML", "LP", 
+                     "Basal", "ML", "LP"))
+
+#add these to the group column
+x$samples$group <- group
+
+#look at the new dataframe.
+x
+
+```
+
+Note the sample names (first column names are shorter) and the group designation for each sample has been added.
+ 
+Now let's add lane information.  This refers to the 'lane' in the Illumina instrument where the actual sequencing took place.  We can group things by lane sometimes to look for any variation attributable to the specific lane to account for any experimental effects. 
+
+```{r}
+lane <- as.factor(rep(c("L004","L006","L008"), c(3,4,2)))
+x$samples$lane <- lane
+x$samples
+```
+
+Note the lane info is added to a new column as a factor so we can group them together by lane if we'd like.
+
+#Organising gene annotations
+
+Our object x is currently a list containing the counts matrix and the samples data frame.  Now we will add a second data frame that contains gene information.
+
+This data frame named "genes" in the DGEList-object is used to store gene-level information associated with rows of the counts matrix. This information can be retrieved using organism specific packages such as Mus.musculus (Bioconductor Core Team 2016b) for mouse (or Homo.sapiens (Bioconductor Core Team 2016a) for human) or the biomaRt package (Durinck et al. 2005, 2009) which interfaces the Ensembl genome databases in order to perform gene annotation.
+
+We have already loaded the mus.musculus package (when we loaded edgeR etc at the beginning of the script)
+
+The type of information that can be retrieved includes gene symbols, gene names, chromosome names and locations, Entrez gene IDs, Refseq gene IDs and Ensembl gene IDs to name just a few. biomaRt primarily works off Ensembl gene IDs, whereas Mus.musculus packages information from various sources and allows users to choose between ma
+ny different gene IDs as the key.
+
+```{r}
+#now we need to correlate geneids with annotation onformation.  SO firs let's get all of the geneids and put them into a list (a vector).
+
+# first look at the geneids- they are the rows of the x DGElist.  We use head so we don't display all 29, 000 of them
+
+head(rownames(x))
+ 
+#now put the rownames into the variable geneid
+geneid <- rownames(x)
+
+#use these geneids to get information from the mus.musculus package.  This is the same as the annotate IDs step of the galaxy tutorial
+
+genes <- select(Mus.musculus, keys=geneid, columns=c("SYMBOL", "TXCHROM"),  keytype="ENTREZID")
+#how does that look?
+
+head(genes, n=20)
+
+# or
+
+View(genes)
+```
+
+This shows that we retrieved the gene symbol and the chromosome location for each geneID
+
+```{r}
+#sometimes entries are duplicated, so we will get rid of any duplicated entries (in the code below !duplicated means not duplicated)
+
+genes <- genes[!duplicated(genes$ENTREZID),]
+
+
+```
+
+Add the new info to our DGElist (x), as a separate dataframe.  Now we have the count matrix, the samples data frame and the genes dataframe.
+
+```{r}
+x$genes <- genes
+x
+```
+
+## Data pre-processing
+
+#Transformations from the raw-scale
+
+For differential expression and related analyses, gene expression is rarely considered at the level of raw counts since libraries sequenced at a greater depth will result in higher counts. Rather, it is common practice to transform raw counts onto a scale that accounts for such library size differences. Popular transformations include counts per million (CPM), log2-counts per million (log-CPM), reads per kilobase of transcript per million (RPKM), and fragments per kilobase of transcript per million (FPKM).
+
+In our analyses, CPM and log-CPM transformations are used regularly although they do not account for gene length differences as RPKM and FPKM values do. While RPKM and FPKM values can just as well be used, CPM and log-CPM values can be calculated using a counts matrix alone and will suffice for the type of comparisons we are interested in. Assuming that there are no differences in isoform usage between conditions, differential expression analyses look at gene expression changes between conditions rather than comparing expression across multiple genes or drawing conclusions on absolute levels of expression. In other words, gene lengths remain constant for comparisons of interest and any observed differences are a result of changes in condition rather than changes in gene length.
+
+Here raw counts are converted to CPM and log-CPM values using the cpm function in edgeR. RPKM values are just as easily calculated as CPM values using the rpkm function in edgeR if gene lengths are available.
+
+```{r}
+#convert raw counts to counts per million, and calculate log2 values for those counts.  Log values are needed for most of the plots we will make in a bit.
+
+cpm <- cpm(x)
+lcpm <- cpm(x, log=TRUE)
+```
+
+We will need the below values for normalizong and plotting counts below.  These values are used to take library size into account as we do subsequent calculations.
+
+```{r}
+L <- mean(x$samples$lib.size) * 1e-6
+M <- median(x$samples$lib.size) * 1e-6
+c(L, M)
+```
+
+# Remove genes that are expressed at too low a level to be of interest
+
+Genes that do not have a worthwhile number of reads in any sample should be filtered out of the downstream analyses. There are several reasons for this. From a biological point of view, genes that not expressed at a biologically meaningful level in any condition are not of interest and are therefore best ignored. From a statistical point of view, removing low count genes allows the mean-variance relationship in the data to be estimated with greater reliability and also reduces the number of statistical tests that need to be carried out in downstream analyses looking at differential expression.
+
+The filterByExpr function in the edgeR package provides an automatic way to filter genes, while keeping as many genes as possible with worthwhile counts.
+
+```{r}
+#reminder of how many genes were included before filtering(27179)
+dim(x)
+
+#filter out low expressed genes.  This uses an edgR specific function called filterByExpr
+
+keep.exprs <- filterByExpr(x, group=group)
+x <- x[keep.exprs,, keep.lib.sizes=FALSE]
+
+#check how many genes made it throgh the filter (16624)
+dim(x)
+
+
+```
+
+
+By default, the function keeps genes with about 10 read counts or more in a minimum number of samples, where the number of samples is chosen according to the minimum group sample size. The actual filtering uses CPM values rather than counts in order to avoid giving preference to samples with large library sizes.
+
+Now, here's some code to generate a figure showing the count distribution before and after filtering.  This uses base R plotting functions rather than ggplot2.  Don't worry about the details.  This should look familiar from the similar analysis using galaxy.
+
+```{r}
+lcpm.cutoff <- log2(10/M + 2/L)
+library(RColorBrewer)
+nsamples <- ncol(x)
+col <- brewer.pal(nsamples, "Paired")
+par(mfrow=c(1,2))
+plot(density(lcpm[,1]), col=col[1], lwd=2, ylim=c(0,0.26), las=2, main="", xlab="")
+title(main="A. Raw data", xlab="Log-cpm")
+abline(v=lcpm.cutoff, lty=3)
+for (i in 2:nsamples){
+den <- density(lcpm[,i])
+lines(den$x, den$y, col=col[i], lwd=2)
+}
+legend("topright", samplenames, text.col=col, bty="n")
+lcpm <- cpm(x, log=TRUE)
+plot(density(lcpm[,1]), col=col[1], lwd=2, ylim=c(0,0.26), las=2, main="", xlab="")
+title(main="B. Filtered data", xlab="Log-cpm")
+abline(v=lcpm.cutoff, lty=3)
+for (i in 2:nsamples){
+den <- density(lcpm[,i])
+lines(den$x, den$y, col=col[i], lwd=2)
+}
+legend("topright", samplenames, text.col=col, bty="n")
+```
+
+
+These graphs should look familiar from the galaxy analysis. The actual samples used in this analysis are different from those used in galaxy.
+
+Maybe, if we get adventurous, we can re-run this whole thing using the same samples as were used in galaxy.
+
+# Normalizing gene expression distributions
+
+During the sample preparation or sequencing process, external factors that are not of biological interest can affect the expression of individual samples. For example, samples processed in the first batch of an experiment can have higher expression overall when compared to samples processed in a second batch. It is assumed that all samples should have a similar range and distribution of expression values. Normalisation is required to ensure that the expression distributions of each sample are similar across the entire experiment.
+
+Any plot showing the per sample expression distributions, such as a density or boxplot, is useful in determining whether any samples are dissimilar to others. Distributions of log-CPM values are similar throughout all samples within this dataset (panel B of the figure above).
+
+Nonetheless, normalisation by the method of trimmed mean of M-values (TMM) (Robinson and Oshlack 2010) is performed using the calcNormFactors function in edgeR. The normalisation factors calculated here are used as a scaling factor for the library sizes. When working with DGEList-objects, these normalisation factors are automatically stored in x$samples$norm.factors. For this dataset the effect of TMM-normalisation is mild, as evident in the magnitude of the scaling factors, which are all relatively close to 1.
+
+```{r}
+x <- calcNormFactors(x, method = "TMM")
+x$samples$norm.factors
+```
+
+```{r}
+par(mfrow=c(1,2))
+lcpm <- cpm(x, log=TRUE)
+boxplot(lcpm, las=2, col=col, main="")
+title(main="A. Example: Unnormalised data",ylab="Log-cpm")
+x <- calcNormFactors(x)  
+
+lcpm <- cpm(x, log=TRUE)
+boxplot(lcpm, las=2, col=col, main="")
+title(main="B. Example: Normalised data",ylab="Log-cpm")
+```
+
+Note there is very little difference between the normalized and unnormalized data.
+
+To illustrate the importance of normalization, the authors modified the data set to show some artificial differences and replotted them before and after normalization.
+
+```{r}
+#creating a new modified data set called x2 and decreasing the # of counts for sample 1 and increasing the number of counts for sample 2
+x2 <- x
+x2$samples$norm.factors <- 1
+x2$counts[,1] <- ceiling(x2$counts[,1]*0.05)
+x2$counts[,2] <- x2$counts[,2]*5
+```
+
+plotting the pre-normalized and post-normalized pretend data
+
+
+```{r}
+par(mfrow=c(1,2))
+lcpm <- cpm(x2, log=TRUE)
+boxplot(lcpm, las=2, col=col, main="")
+title(main="A. Example: Unnormalised data",ylab="Log-cpm")
+x2 <- calcNormFactors(x2) #data is normalized in this step  
+lcpm <- cpm(x2, log=TRUE)
+boxplot(lcpm, las=2, col=col, main="")
+title(main="B. Example: Normalised data",ylab="Log-cpm")
+```
+
+# Unsupervised clustering of samples
+
+In other words - Principle Component Analysis or PCA
+
+In our opinion, one of the most important exploratory plots to examine for gene expression analyses is the multi-dimensional scaling (MDS) plot, or similar. The plot shows similarities and dissimilarities between samples in an unsupervised manner so that one can have an idea of the extent to which differential expression can be detected before carrying out formal tests. Ideally, samples would cluster well within the primary condition of interest, and any sample straying far from its group could be identified and followed up for sources of error or extra variation. If present, technical replicates should lie very close to one another.
+
+Such a plot can be made in limma using the plotMDS function. The first dimension represents the leading-fold-change that best separates samples and explains the largest proportion of variation in the data, with subsequent dimensions having a smaller effect. 
+
+In this dataset, samples can be seen to cluster well within experimental groups over dimension 1 and 2, and then separate by sequencing lane (sample batch) over dimension 3 (shown in the plot below). Keeping in mind that the first dimension explains the largest proportion of variation in the data, notice that the range of values over the dimensions become smaller as we move to higher dimensions.
+
+While all samples cluster by groups, the largest transcriptional difference is observed between basal and LP, and basal and ML over dimension 1. For this reason, it is expected that pairwise comparisons between cell populations will result in a greater number of DE genes for comparisons involving basal samples, and relatively small numbers of DE genes when comparing ML to LP. Datasets where samples do not cluster by experimental group may show little or no evidence of differential expression in the downstream analysis.
+
+To create the MDS plots, we assign different colours to the factors of interest. Dimensions 1 and 2 are examined using the color grouping defined by cell types.
+
+```{r}
+lcpm <- cpm(x, log=TRUE)
+par(mfrow=c(1,2))
+col.group <- group
+levels(col.group) <-  brewer.pal(nlevels(col.group), "Set1")
+col.group <- as.character(col.group)
+col.lane <- lane
+levels(col.lane) <-  brewer.pal(nlevels(col.lane), "Set2")
+col.lane <- as.character(col.lane)
+plotMDS(lcpm, labels=group, col=col.group)
+title(main="A. Sample groups")
+plotMDS(lcpm, labels=lane, col=col.lane, dim=c(3,4))
+title(main="B. Sequencing lanes")
+```
+
+Making the interactive MDS plot using Glimma
+
+
+```{r}
+glMDSPlot(lcpm, labels=paste(group, lane, sep="_"), 
+          groups=x$samples[,c(2,5)], launch=FALSE)
+```
+
+## Differential expression analysis
+
+After all this is the whole point - doing the DE Analysis
+
+# Creating a design matrix and contrasts
+
+In this study, it is of interest to see which genes are expressed at different levels between the three cell populations profiled. In our analysis, linear models are fitted to the data with the assumption that the underlying data is normally distributed. To get started, a design matrix is set up with both the cell population and sequencing lane (batch) information.
+
+Let's do some linear modelling with limma 
+
+```{r}
+design <- model.matrix(~0+group+lane)
+colnames(design) <- gsub("group", "", colnames(design))
+design
+```
+
+```{r}
+contr.matrix <- makeContrasts(
+   BasalvsLP = Basal-LP, 
+   BasalvsML = Basal - ML, 
+   LPvsML = LP - ML, 
+   levels = colnames(design))
+contr.matrix
+```
+
+# Removing heteroscedascity from count data
+
+heteroscedascity Definition from [here](http://www.statsmakemecry.com/smmctheblog/confusing-stats-terms-explained-heteroscedasticity-heteroske.html#:~:text=Heteroscedasticity%20is%20a%20hard%20word,second%20variable%20that%20predicts%20it.) 
+
+Heteroscedasticity is a hard word to pronounce, but it doesn't need to be a difficult concept to understand. Put simply, heteroscedasticity (also spelled heteroskedasticity) refers to the circumstance in which the variability of a variable is unequal across the range of values of a second variable that predicts it.
+
+It has been shown that for RNA-seq count data, the variance is not independent of the mean (Law et al. 2014) – this is true of raw counts or when transformed to log-CPM values. In limma, linear modelling is carried out on the log-CPM values which are assumed to be normally distributed and the mean-variance relationship is accommodated using precision weights calculated by the voom function.
+
+When operating on a DGEList-object, voom converts raw counts to log-CPM values by automatically extracting library sizes and normalisation factors from x itself. Additional normalisation to log-CPM values can be specified within voom using the normalize.method argument.
+
+The mean-variance relationship of log-CPM values for this dataset is shown in the left-hand panel of the next figure. Typically, the voom-plot shows a decreasing trend between the means and variances resulting from a combination of technical variation in the sequencing experiment and biological variation amongst the replicate samples from different cell populations. Experiments with high biological variation usually result in flatter trends, where variance values plateau at high expression values. Experiments with low biological variation tend to result in sharp decreasing trends.
+
+Moreover, the voom-plot provides a visual check on the level of filtering performed upstream. If filtering of lowly-expressed genes is insufficient, a drop in variance levels can be observed at the low end of the expression scale due to very small counts. If this is observed, one should return to the earlier filtering step and increase the expression threshold applied to the dataset.
+
+Where sample-level variation is evident from earlier inspections of the MDS plot, the voomWithQualityWeights function can be used to simultaneously incorporate sample-level weights together with the abundance dependent weights estimated by voom (Liu et al. 2015). For an example of this approach, see Liu et al. (2016) (Liu et al. 2016).
+
+First set up the plot with par
+
+and run voom on the x data.  Using the design parameters specificed above. 
+
+```{r}
+par(mfrow=c(1,2))
+v <- voom(x, design, plot=TRUE)
+```
+
+Use lmfit linear modelling function to adjust for the heteroscedasicity (I think this is what is going on here)
+
+```{r}
+vfit <- lmFit(v, design)
+vfit <- contrasts.fit(vfit, contrasts=contr.matrix)
+efit <- eBayes(vfit)
+plotSA(efit, main="Final model: Mean-variance trend")
+```
+
+Put them together side by side
+
+```{r}
+par(mfrow=c(1,2))
+v <- voom(x, design, plot=TRUE)
+vfit <- lmFit(v, design)
+vfit <- contrasts.fit(vfit, contrasts=contr.matrix)
+efit <- eBayes(vfit)
+plotSA(efit, main="Final model: Mean-variance trend")
+```
+
+
+The plot on the left is created within the voom function which extracts residual variances from fitting linear models to log-CPM transformed data. Variances are then rescaled to quarter-root variances (or square-root of standard deviations) and plotted against the average log2 count for each gene. The plot on the right is created using plotSA which plots log2 residual standard deviations against mean log-CPM values. In both plots, each black dot represents a gene. On the left plot, the red curve shows the estimated mean-variance trend used to compute the voom weights. On the right plot, the average log2 residual standard deviation estimated by the empirical Bayes algorithm is marked by a horizontal blue line.
+
+
+#Examining the number of DE genes
+
+For a quick look at differential expression levels, the number of significantly up- and down-regulated genes can be summarised in a table.
+
+```{r}
+summary(decideTests(efit))
+```
+
+Some studies require more than an adjusted p-value cut-off. For a stricter definition on significance, one may require log-fold-changes (log-FCs) to be above a minimum value. The treat method (McCarthy and Smyth 2009) can be used to calculate p-values from empirical Bayes moderated t-statistics with a minimum log-FC requirement. The number of differentially expressed genes are reduced to a total of 3,648 DE genes for basal versus LP, 3,834 DE genes for basal versus ML, and 414 DE genes for LP versus ML when testing requires genes to have a log-FC that is significantly greater than 1 (equivalent to a 2-fold difference between cell types on the original scale).
+
+```{r}
+tfit <- treat(vfit, lfc=1)
+dt <- decideTests(tfit)
+summary(dt)
+```
+
+What genes are in common between 2 cell type comparisons
+
+```{r}
+de.common <- which(dt[,1]!=0 & dt[,2]!=0)
+length(de.common)
+```
+
+```{r}
+basal.vs.lp <- topTreat(tfit, coef=1, n=Inf)
+basal.vs.ml <- topTreat(tfit, coef=2, n=Inf)
+head(basal.vs.lp)
+```
+
+
+```{r}
+vennDiagram(dt[,1:2], circle.col=c("turquoise", "salmon"))
+```
+
+making a MD plot for basal vs LP comparison of differentially expressed genes.
+
+
+```{r}
+plotMD(tfit, column=1, status=dt[,1], main=colnames(tfit)[1], 
+       xlim=c(-8,13))
+```
+
+Let's make it interactive with glimma
+
+```{r}
+glMDPlot(tfit, coef=1, status=dt, main=colnames(tfit)[1],
+         side.main="ENTREZID", counts=lcpm, groups=group, launch=FALSE)
+```
+
+
+Making a heatmap
+
+```{r}
+library(gplots)
+basal.vs.lp.topgenes <- basal.vs.lp$ENTREZID[1:100]
+i <- which(v$genes$ENTREZID %in% basal.vs.lp.topgenes)
+mycol <- colorpanel(1000,"blue","white","red")
+heatmap.2(lcpm[i,], scale="row",
+   labRow=v$genes$SYMBOL[i], labCol=group, 
+   col=mycol, trace="none", density.info="none", 
+   margin=c(4,6), lhei=c(2,10), dendrogram="column")
+```
+
+##making a volcano plot
+
+After all this, the edgeR doesn't have a volcano plot function.
+
+so here I will create one using the galaxy data
+
+I first downloaded the data set and copied it to this folder as annotateDEgenes.tabular
+
+https://zenodo.org/record/3477564/files/annotatedDEgenes.tabular
+
+I imported this file using the import dataset drop down menu.
+
+```{r}
+#add the data to a variable
+annotatedDEgenes <- annotatedDEgenes
+
+
+View (annotatedDEgenes)
+```
+
+We will create the volcano 
+
+```{r}
+ names(annotatedDEgenes)[names(annotatedDEgenes) == "log2(FC)"] <- "log2.FC"
+
+colnames(annotatedDEgenes)
+
+names(annotatedDEgenes)[names(annotatedDEgenes) == "P-value"] <- "p.value"
+```
+
+```{r}
+ volcano <- ggplot(data = annotatedDEgenes, aes(x = log2.FC, y = p.value))
+```
+
+```{r}
+volcano <- volcano + geom_point()
+volcano
+```
+
+Plot the -log10p.value v log2FC
+
+```{r}
+ ggplot(data = annotatedDEgenes, aes(x = log2.FC, y = -log10(p.value), color = Strand)) +
+     geom_point(alpha = 0.5)
+```
+
+
+
+
+
+
+```
+
